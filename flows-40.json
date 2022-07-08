@@ -1,0 +1,459 @@
+[
+    {
+        "id": "9ad7058744a2d0bb",
+        "type": "tab",
+        "label": "Vibration Dashboard",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "2e421a257c7ba6fc",
+        "type": "ncd-gateway-node",
+        "z": "9ad7058744a2d0bb",
+        "name": "",
+        "connection": "57f4b0572241b42e",
+        "unknown_devices": 0,
+        "outputs": 1,
+        "x": 130,
+        "y": 240,
+        "wires": [
+            [
+                "a31973cdb68b115a"
+            ]
+        ]
+    },
+    {
+        "id": "a31973cdb68b115a",
+        "type": "switch",
+        "z": "9ad7058744a2d0bb",
+        "name": "Check Address",
+        "property": "payload.addr",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "00:13:a2:00:41:ee:27:41",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "00:13:a2:00:41:ee:27:42",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 340,
+        "y": 240,
+        "wires": [
+            [
+                "3b5faa7dc630fb99"
+            ],
+            [
+                "963404c1d52e761b"
+            ]
+        ]
+    },
+    {
+        "id": "e77f6af2f24d65ba",
+        "type": "ui_gauge",
+        "z": "9ad7058744a2d0bb",
+        "name": "AH1 Max Frequency",
+        "group": "8256735ee043c303",
+        "order": 4,
+        "width": "6",
+        "height": "3",
+        "gtype": "gage",
+        "title": "Max Peak Frequency",
+        "label": "Hz",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "100",
+        "colors": [
+            "#919191",
+            "#919191",
+            "#919191"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "className": "",
+        "x": 820,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "370ae6a698857f13",
+        "type": "ui_text_input",
+        "z": "9ad7058744a2d0bb",
+        "name": "AH1 User Frequency Input",
+        "label": "Input Motor Frequency",
+        "tooltip": "",
+        "group": "8256735ee043c303",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "mode": "number",
+        "delay": 300,
+        "topic": "topic",
+        "sendOnBlur": true,
+        "className": "",
+        "topicType": "msg",
+        "x": 840,
+        "y": 200,
+        "wires": [
+            [
+                "dc10902900decc3c"
+            ]
+        ]
+    },
+    {
+        "id": "dc10902900decc3c",
+        "type": "change",
+        "z": "9ad7058744a2d0bb",
+        "name": "Set AH1 Motor Frequency Variable",
+        "rules": [
+            {
+                "t": "set",
+                "p": "motor_frequency",
+                "pt": "flow",
+                "to": "payload",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1140,
+        "y": 200,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "3b5faa7dc630fb99",
+        "type": "function",
+        "z": "9ad7058744a2d0bb",
+        "name": "Evaluate Readings",
+        "func": "var peaks = [msg.payload.sensor_data.x_peak_one_Hz, msg.payload.sensor_data.x_peak_two_Hz, msg.payload.sensor_data.x_peak_three_Hz, msg.payload.sensor_data.y_peak_one_Hz, msg.payload.sensor_data.y_peak_two_Hz, msg.payload.sensor_data.y_peak_three_Hz, msg.payload.sensor_data.z_peak_one_Hz, msg.payload.sensor_data.z_peak_two_Hz, msg.payload.sensor_data.z_peak_three_Hz];\nvar multipliers = [];\nvar inputSpeed = flow.get(\"motor_frequency\");\nvar max = 0;\nfor(i = 0; i < peaks.length; i++){\n    if(peaks[i] == 0){\n        peaks.splice(i,1);\n    }else{\n        if(peaks[i] > max){\n            max = peaks[i];\n        }\n        multipliers.push(Math.round(peaks[i]/inputSpeed));\n    }\n}\nvar msg1 = {};\nmsg1.payload = max;\n\nvar bearing = false;\nvar loose = false;\nvar misalignment = false;\n\nvar multipliersText = \"\";\n\nvar failures = [];\n\nfor(i = 0; i < multipliers.length; i++){\n    if(multipliers[i]!= 1 && ! failures.includes(multipliers[i])){\n        multipliersText+=multipliers[i]+\"X \";\n        failures.push(multipliers[i]);\n    }\n    \n    if(multipliers[i] == 2 || multipliers[i] == 3){\n        misalignment = true;\n    }\n    if(multipliers[i] == 2 || multipliers[i] == 3 || multipliers[i] == 4 || multipliers[i] == 5){\n        loose = true;\n    }\n    if(multipliers[i] == 3 || multipliers[i] == 6 || multipliers[i] == 9 || multipliers[i] >= 12){\n        bearing = true;\n    }\n}\nvar message = \"\";\nif(bearing || loose || misalignment){\n    message += \"<p>Warning:</p>\";\n    if(bearing){\n        message+= \"<p>Possible Bearing Damage</p>\";\n    }\n    if(loose){\n        message+= \"<p>Check Mounting of Motor</p>\";\n    }\n    if(misalignment){\n        message+= \"<p>Check Alignment with load</p>\";\n    }\n    message += \"<p>\"+multipliersText+\"</p>\";\n}else{\n    message += \"Status: OK\";\n}\nvar msg2 = {\"payload\":message};\n\nvar d = new Date();\nvar time = d.getHours()+\":\"+d.getMinutes()+\":\"+d.getSeconds();\nmsg3 = {\"payload\": d.getHours()+\":\"+d.getMinutes()+\":\"+d.getSeconds()};\n\nreturn [msg1,msg2,msg3];",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 550,
+        "y": 200,
+        "wires": [
+            [
+                "e77f6af2f24d65ba"
+            ],
+            [
+                "91c599163dd4ad42",
+                "dfeea79f4ef11137"
+            ],
+            [
+                "55a6d5928d9faf09"
+            ]
+        ]
+    },
+    {
+        "id": "91c599163dd4ad42",
+        "type": "ui_text",
+        "z": "9ad7058744a2d0bb",
+        "group": "8256735ee043c303",
+        "order": 3,
+        "width": "6",
+        "height": "3",
+        "name": "AH1 Status Text",
+        "label": "Motor Status",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "motor-status",
+        "x": 800,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "55a6d5928d9faf09",
+        "type": "ui_text",
+        "z": "9ad7058744a2d0bb",
+        "group": "8256735ee043c303",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "name": "AH1 Timestamp",
+        "label": "Last Reception",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "",
+        "x": 800,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "c6027b450caea8cf",
+        "type": "ui_template",
+        "z": "9ad7058744a2d0bb",
+        "group": "fc08b77d.62707",
+        "name": "CSS Class for Title Red/Green",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "format": "<style id=\"dash-styles\">\n.nr-dashboard-theme .nr-dashboard-template {\n    background-color: #33333300;\n}\n</style>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "global",
+        "className": "",
+        "x": 150,
+        "y": 120,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "dfeea79f4ef11137",
+        "type": "ui_template",
+        "z": "9ad7058744a2d0bb",
+        "group": "8256735ee043c303",
+        "name": "AH1 Set Red/Green",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "format": "<div id=\"{{'my_'+$id}}\" style=\"display:none\">TEST GROUP</div>\n\n<script>\n(function(scope) {\n  scope.$watch('msg', function(msg) {\n    if (msg) {\n      // Do something when msg arrives\n      var c = msg.payload == \"Status: OK\" ? \"#09ff00\" : \"#ff2629\"\n      $(\"#my_\"+scope.$id).closest(\".nr-dashboard-cardpanel\").find(\".nr-dashboard-cardtitle\").attr(\"style\",\"background-color:\"+c+\";line-height:32px;color:black;\");\n    }\n  });\n})(scope);\n</script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 820,
+        "y": 120,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ef28ec63d935d1f3",
+        "type": "ui_gauge",
+        "z": "9ad7058744a2d0bb",
+        "name": "AH2 Max Frequency",
+        "group": "470ad073a3ad8b51",
+        "order": 4,
+        "width": "6",
+        "height": "3",
+        "gtype": "gage",
+        "title": "Max Peak Frequency",
+        "label": "Hz",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "100",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "",
+        "seg2": "",
+        "className": "",
+        "x": 820,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "9615b66053d27978",
+        "type": "ui_text_input",
+        "z": "9ad7058744a2d0bb",
+        "name": "AH1 User Frequency Input",
+        "label": "Input Motor Frequency",
+        "tooltip": "",
+        "group": "470ad073a3ad8b51",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "passthru": true,
+        "mode": "number",
+        "delay": 300,
+        "topic": "topic",
+        "sendOnBlur": true,
+        "className": "",
+        "topicType": "msg",
+        "x": 840,
+        "y": 440,
+        "wires": [
+            [
+                "9b4034e20a9de096"
+            ]
+        ]
+    },
+    {
+        "id": "9b4034e20a9de096",
+        "type": "change",
+        "z": "9ad7058744a2d0bb",
+        "name": "Set AH1 Motor Frequency Variable",
+        "rules": [
+            {
+                "t": "set",
+                "p": "motor_frequency_2",
+                "pt": "flow",
+                "to": "payload",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1140,
+        "y": 440,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "f0da5d8825401cef",
+        "type": "ui_text",
+        "z": "9ad7058744a2d0bb",
+        "group": "470ad073a3ad8b51",
+        "order": 3,
+        "width": "6",
+        "height": "3",
+        "name": "AH2 Status Text",
+        "label": "Motor Status",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "motor-status",
+        "x": 800,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "3a0bd146ee96a6c3",
+        "type": "ui_text",
+        "z": "9ad7058744a2d0bb",
+        "group": "470ad073a3ad8b51",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "name": "AH2 Timestamp",
+        "label": "Last Reception",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "",
+        "x": 800,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "40d01e555409024c",
+        "type": "ui_template",
+        "z": "9ad7058744a2d0bb",
+        "group": "470ad073a3ad8b51",
+        "name": "AH2 Set Red/Green",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "format": "<div id=\"{{'my_'+$id}}\" style=\"display:none\">TEST GROUP</div>\n\n<script>\n(function(scope) {\n  scope.$watch('msg', function(msg) {\n    if (msg) {\n      // Do something when msg arrives\n      var c = msg.payload == \"Status: OK\" ? \"#09ff00\" : \"#ff2629\"\n      $(\"#my_\"+scope.$id).closest(\".nr-dashboard-cardpanel\").find(\".nr-dashboard-cardtitle\").attr(\"style\",\"background-color:\"+c+\";line-height:32px;color:black;\");\n    }\n  });\n})(scope);\n</script>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 820,
+        "y": 360,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "963404c1d52e761b",
+        "type": "function",
+        "z": "9ad7058744a2d0bb",
+        "name": "Evaluate Readings",
+        "func": "var peaks = [msg.payload.sensor_data.x_peak_one_Hz, msg.payload.sensor_data.x_peak_two_Hz, msg.payload.sensor_data.x_peak_three_Hz, msg.payload.sensor_data.y_peak_one_Hz, msg.payload.sensor_data.y_peak_two_Hz, msg.payload.sensor_data.y_peak_three_Hz, msg.payload.sensor_data.z_peak_one_Hz, msg.payload.sensor_data.z_peak_two_Hz, msg.payload.sensor_data.z_peak_three_Hz];\nvar multipliers = [];\nvar inputSpeed = flow.get(\"motor_frequency_2\");\nvar max = 0;\nfor(i = 0; i < peaks.length; i++){\n    if(peaks[i] == 0){\n        peaks.splice(i,1);\n    }else{\n        if(peaks[i] > max){\n            max = peaks[i];\n        }\n        multipliers.push(Math.round(peaks[i]/inputSpeed));\n    }\n}\nvar msg1 = {};\nmsg1.payload = max;\n\nvar bearing = false;\nvar loose = false;\nvar misalignment = false;\n\nvar multipliersText = \"\";\n\nvar failures = [];\n\nfor(i = 0; i < multipliers.length; i++){\n    if(multipliers[i]!= 1 && ! failures.includes(multipliers[i])){\n        multipliersText+=multipliers[i]+\"X \";\n        failures.push(multipliers[i]);\n    }\n    \n    if(multipliers[i] == 2 || multipliers[i] == 3){\n        misalignment = true;\n    }\n    if(multipliers[i] == 2 || multipliers[i] == 3 || multipliers[i] == 4 || multipliers[i] == 5){\n        loose = true;\n    }\n    if(multipliers[i] == 3 || multipliers[i] == 6 || multipliers[i] == 9 || multipliers[i] >= 12){\n        bearing = true;\n    }\n}\nvar message = \"\";\nif(bearing || loose || misalignment){\n    message += \"<p>Warning:</p>\";\n    if(bearing){\n        message+= \"<p>Possible Bearing Damage</p>\";\n    }\n    if(loose){\n        message+= \"<p>Check Mounting of Motor</p>\";\n    }\n    if(misalignment){\n        message+= \"<p>Check Alignment with load</p>\";\n    }\n    message += \"<p>\"+multipliersText+\"</p>\";\n}else{\n    message += \"Status: OK\";\n}\nvar msg2 = {\"payload\":message};\n\nvar d = new Date();\nvar time = d.getHours()+\":\"+d.getMinutes()+\":\"+d.getSeconds();\nmsg3 = {\"payload\": d.getHours()+\":\"+d.getMinutes()+\":\"+d.getSeconds()};\n\nreturn [msg1,msg2,msg3];",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 550,
+        "y": 280,
+        "wires": [
+            [
+                "ef28ec63d935d1f3"
+            ],
+            [
+                "f0da5d8825401cef",
+                "40d01e555409024c"
+            ],
+            [
+                "3a0bd146ee96a6c3"
+            ]
+        ]
+    },
+    {
+        "id": "57f4b0572241b42e",
+        "type": "ncd-gateway-config",
+        "name": "Zigmo",
+        "comm_type": "serial",
+        "ip_address": "",
+        "tcp_port": "2101",
+        "port": "/dev/tty.usbserial-AC3VPT56",
+        "baudRate": "115200",
+        "pan_id": "7fff",
+        "rssi": false
+    },
+    {
+        "id": "8256735ee043c303",
+        "type": "ui_group",
+        "name": "Air Handler 1",
+        "tab": "13679185.a7e496",
+        "order": 2,
+        "disp": true,
+        "width": "6",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "fc08b77d.62707",
+        "type": "ui_group",
+        "name": "TEST",
+        "tab": "826dc63e.367f48",
+        "order": 1,
+        "disp": false,
+        "width": "6",
+        "collapse": false
+    },
+    {
+        "id": "470ad073a3ad8b51",
+        "type": "ui_group",
+        "name": "Air Handler 2",
+        "tab": "13679185.a7e496",
+        "order": 2,
+        "disp": true,
+        "width": "6",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "13679185.a7e496",
+        "type": "ui_tab",
+        "name": "Motor Monitor",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
+    },
+    {
+        "id": "826dc63e.367f48",
+        "type": "ui_tab",
+        "name": "Home",
+        "icon": "dashboard",
+        "order": 1,
+        "disabled": false,
+        "hidden": true
+    }
+]
